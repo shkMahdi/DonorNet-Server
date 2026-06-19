@@ -1,6 +1,8 @@
 const port = 5000
+const cors = requie('cors')
 
 
+app.use(cors())
 
 app.get('/', (req, res) => {
   res.send('Hello World!')
