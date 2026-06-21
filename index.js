@@ -1,13 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion } = require('mongodb');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors());
-app.use(express.json());  
+app.use(express.json());
 
 const uri = process.env.MONGODB_URI;
 
@@ -19,6 +20,38 @@ const client = new MongoClient(uri, {
   }
 });
 
+const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer')) {
+    return res.status(401).send({ error: 'Unauthorized' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).send({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = payload;
+    next();
+  } catch (error) {
+    console.log(error);
+    return res.status(401).send({ error: 'Invalid token' });
+  }
+};
+
+const activeUserVerification = async (req, res, next) => {
+  const user = req.user;
+  if(user.status !== 'active') {
+    return res.status(403).send({ error: 'User is not active' });
+  }
+  next();
+}
+
 async function run() {
   try {
     await client.connect();
@@ -27,11 +60,11 @@ async function run() {
 
     console.log("Connected to MongoDB!");
 
-
+    
     app.get('/api/requests', async (req, res) => {
       const query = {};
 
-      if(req.query.requesterEmail){
+      if (req.query.requesterEmail) {
         query.requesterEmail = req.query.requesterEmail;
       }
 
@@ -41,7 +74,7 @@ async function run() {
     })
 
     // POST Route - Create Donation Request
-    app.post('/api/requests', async (req, res) => {
+    app.post('/api/requests', verifyToken, activeUserVerification, async (req, res) => {
       try {
         const request = req.body;
         const result = await requestCollection.insertOne(request);
@@ -64,5 +97,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
+  console.log(`Server running on port ${port}`);
 });
