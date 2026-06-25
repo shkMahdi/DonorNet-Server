@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 require('dotenv').config();
 
@@ -60,7 +60,7 @@ async function run() {
 
     console.log("Connected to MongoDB!");
 
-    
+    // get requests by requesterEmail
     app.get('/api/requests', async (req, res) => {
       const query = {};
 
@@ -71,6 +71,20 @@ async function run() {
       const cursor = requestCollection.find(query);
       const requests = await cursor.toArray();
       res.send(requests);
+    })
+
+    //get all request 
+    app.get('/api/donation-requests', async (req, res) => {
+      const result =  await requestCollection.find().toArray();
+      res.send(result);
+    } )
+
+    //get request details
+    app.get('/api/donation-requests/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const request = await requestCollection.findOne(query);
+      res.send(request);
     })
 
     // POST Route - Create Donation Request
