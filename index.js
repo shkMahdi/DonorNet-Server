@@ -163,6 +163,45 @@ async function run() {
       }
     });
 
+    app.patch('/api/donation-requests/:id/status', verifyToken, activeUserVerification, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { status } = req.body;
+
+        const allowedStatuses = ['done', 'canceled'];
+        if (!allowedStatuses.includes(status)) {
+          return res.status(400).send({ error: 'Invalid status value' });
+        }
+
+        const query = { _id: new ObjectId(id) };
+        const request = await requestCollection.findOne(query);
+
+        if (!request) {
+          return res.status(404).send({ error: 'Request not found' });
+        }
+
+        // only the original requester can mark it done or cancel it
+        if (request.requesterEmail !== req.user.email) {
+          return res.status(403).send({ error: 'You are not authorized to update this request' });
+        }
+
+        // can only transition from 'in progress'
+        if (request.status !== 'in progress') {
+          return res.status(409).send({ error: 'Only requests that are in progress can be updated' });
+        }
+
+        const updateDoc = {
+          $set: { status },
+        };
+
+        const result = await requestCollection.updateOne(query, updateDoc);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: 'Failed to update request status' });
+      }
+    });
+
 
   } catch (error) {
     console.error("MongoDB Connection Error:", error);
