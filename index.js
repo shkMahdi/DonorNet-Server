@@ -139,6 +139,30 @@ async function run() {
       }
     });
 
+    app.delete('/api/donation-requests/:id', verifyToken, activeUserVerification, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+
+        const request = await requestCollection.findOne(query);
+
+        if (!request) {
+          return res.status(404).send({ error: 'Request not found' });
+        }
+
+        // ownership check — only the person who created it can delete it
+        if (request.requesterEmail !== req.user.email) {
+          return res.status(403).send({ error: 'You are not authorized to delete this request' });
+        }
+
+        const result = await requestCollection.deleteOne(query);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: 'Failed to delete request' });
+      }
+    });
+
 
   } catch (error) {
     console.error("MongoDB Connection Error:", error);
@@ -150,6 +174,8 @@ run().catch(console.dir);
 app.get('/', (req, res) => {
   res.send('Donor Net Server is running!');
 });
+
+
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
