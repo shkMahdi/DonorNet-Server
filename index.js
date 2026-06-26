@@ -46,7 +46,7 @@ const verifyToken = async (req, res, next) => {
 
 const activeUserVerification = async (req, res, next) => {
   const user = req.user;
-  if(user.status !== 'active') {
+  if (user.status !== 'active') {
     return res.status(403).send({ error: 'User is not active' });
   }
   next();
@@ -75,9 +75,9 @@ async function run() {
 
     //get all request 
     app.get('/api/donation-requests', async (req, res) => {
-      const result =  await requestCollection.find().toArray();
+      const result = await requestCollection.find().toArray();
       res.send(result);
-    } )
+    })
 
     //get request details
     app.get('/api/donation-requests/:id', async (req, res) => {
@@ -98,6 +98,47 @@ async function run() {
         res.status(500).send({ error: "Failed to create request" });
       }
     });
+
+
+    // donate
+    // PATCH - Donate to a request
+    app.patch('/api/donation-requests/:id/donate', verifyToken, activeUserVerification, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { donorName, donorEmail } = req.body;
+
+        if (!donorName || !donorEmail) {
+          return res.status(400).send({ error: 'Donor name and email are required' });
+        }
+
+        const query = { _id: new ObjectId(id) };
+        const request = await requestCollection.findOne(query);
+
+        if (!request) {
+          return res.status(404).send({ error: 'Request not found' });
+        }
+
+        // prevent donating to a request that's already taken
+        if (request.status !== 'pending') {
+          return res.status(409).send({ error: 'This request is no longer available' });
+        }
+
+        const updateDoc = {
+          $set: {
+            status: 'in progress',
+            donorName,
+            donorEmail,
+          },
+        };
+
+        const result = await requestCollection.updateOne(query, updateDoc);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: 'Failed to process donation' });
+      }
+    });
+
 
   } catch (error) {
     console.error("MongoDB Connection Error:", error);
