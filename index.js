@@ -52,6 +52,14 @@ const activeUserVerification = async (req, res, next) => {
   next();
 }
 
+const adminVolunteerVerification = async (req, res, next) => {
+  const user = req.user;
+  if (user.role !== 'admin' && user.role !== 'volunteer') {
+    return res.status(403).send({ error: 'User is not an admin or volunteer' });
+  }
+  next();
+}
+
 const adminVerification = async (req, res, next) => {
   const user = req.user;
   if (user.role !== 'admin') {
@@ -70,7 +78,7 @@ async function run() {
     console.log("Connected to MongoDB!");
 
     // get all users
-    app.get('/api/users', verifyToken, adminVerification, async (req, res) => {
+    app.get('/api/users', verifyToken, adminVolunteerVerification, async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
@@ -241,6 +249,61 @@ async function run() {
       }
 
       res.send({ success: true, message: 'User updated successfully' });
+    });
+
+    app.patch('/api/donation-requests/:id', verifyToken, activeUserVerification, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+
+        const request = await requestCollection.findOne(query);
+
+        if (!request) {
+          return res.status(404).send({ error: 'Request not found' });
+        }
+
+        // only the original requester can edit it
+        if (request.requesterEmail !== req.user.email) {
+          return res.status(403).send({ error: 'You are not authorized to edit this request' });
+        }
+
+        // only allow editing while it's still pending —
+        // once a donor is matched, the details shouldn't change underneath them
+        if (request.status !== 'pending') {
+          return res.status(409).send({ error: 'Only pending requests can be edited' });
+        }
+
+        // whitelist exactly which fields are editable —
+        // never spread req.body directly into $set
+        const editableFields = [
+          'name',
+          'bloodGroup',
+          'district',
+          'upazila',
+          'hospitalName',
+          'hospitalAddress',
+          'date',
+          'time',
+          'requestMessage',
+        ];
+
+        const updateFields = {};
+        for (const field of editableFields) {
+          if (req.body[field] !== undefined) {
+            updateFields[field] = req.body[field];
+          }
+        }
+
+        if (Object.keys(updateFields).length === 0) {
+          return res.status(400).send({ error: 'No valid fields provided to update' });
+        }
+
+        const result = await requestCollection.updateOne(query, { $set: updateFields });
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: 'Failed to update request' });
+      }
     });
 
 
