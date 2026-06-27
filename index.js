@@ -203,10 +203,10 @@ async function run() {
           return res.status(404).send({ error: 'Request not found' });
         }
 
-        // only the original requester can mark it done or cancel it
-        if (request.requesterEmail !== req.user.email) {
-          return res.status(403).send({ error: 'You are not authorized to update this request' });
+        if ((request.requesterEmail !== req.user.email) && (req.user.role !== 'admin')) {
+          return res.status(403).send({ error: 'You are not authorized to edit this request' });
         }
+
 
         // can only transition from 'in progress'
         if (request.status !== 'in progress') {
@@ -262,8 +262,8 @@ async function run() {
           return res.status(404).send({ error: 'Request not found' });
         }
 
-        // only the original requester can edit it
-        if (request.requesterEmail !== req.user.email) {
+        // only the original requester and adminscan edit it
+        if ((request.requesterEmail !== req.user.email) && (req.user.role !== 'admin')) {
           return res.status(403).send({ error: 'You are not authorized to edit this request' });
         }
 
