@@ -52,13 +52,28 @@ const activeUserVerification = async (req, res, next) => {
   next();
 }
 
+const adminVerification = async (req, res, next) => {
+  const user = req.user;
+  if (user.role !== 'admin') {
+    return res.status(403).send({ error: 'User is not an admin' });
+  }
+  next();
+}
+
 async function run() {
   try {
     await client.connect();
     const database = client.db("donor-net");
     const requestCollection = database.collection("requests");
+    const usersCollection = database.collection("user");
 
     console.log("Connected to MongoDB!");
+
+    // get all users
+    app.get('/api/users', verifyToken, adminVerification, async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
 
     // get requests by requesterEmail
     app.get('/api/requests', async (req, res) => {
@@ -200,6 +215,32 @@ async function run() {
         console.error(error);
         res.status(500).send({ error: 'Failed to update request status' });
       }
+    });
+
+    app.patch('/api/users/:id', verifyToken, adminVerification, async (req, res) => {
+      const { id } = req.params;
+      const { role, status } = req.body;
+
+      const updates = {};
+      if (role) updates.role = role;
+      if (status) updates.status = status;
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).send({ error: 'No valid fields to update' });
+      }
+
+      updates.updatedAt = new Date();
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updates }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).send({ error: 'User not found' });
+      }
+
+      res.send({ success: true, message: 'User updated successfully' });
     });
 
 
